@@ -6,8 +6,9 @@ import numpy as np
 
 class G2_AlphaAlgorithm:
 
-    def __init__(self):
-        self.rawDataPath = ""
+    def __init__(self, numberStartTokens, numberEndTokens):
+        self.numberStartTokens = numberStartTokens
+        self.numberEndTokens = numberEndTokens
         self.dataLog = 0
         self.net = PetriNet()
         self.startEvents = []
@@ -22,15 +23,13 @@ class G2_AlphaAlgorithm:
         self.footprintMatrix = np.empty(1)
         self.setDict = dict()
 
-    def createPetriNet(self, rawDataPath, numberStartTokens, numberEndTokens):
-        self.rawDataPath = rawDataPath
-        self.net = PetriNet("Petri Net of " + self.rawDataPath)
-        self.__createLog()
+    def createPetriNet(self, log):
+        self.net = PetriNet("Petri Net of G2 Alpha")
+        self.__createLog(log)
         self.__getStartAndEndEvents()
         self.__addTransitions()
         self.__addPlacesAndArcs()
-        self.__initialiseMarkings(numberStartTokens, numberEndTokens)
-        print("I've run!")
+        self.__initialiseMarkings()
         return self.net, self.initialMarking, self.finalMarking
     
     ####  GETTERS AND SETTERS  ###################################################################
@@ -67,8 +66,8 @@ class G2_AlphaAlgorithm:
     
     ####  PRIVATE FUNCTIONS    ###################################################################
             
-    def __createLog(self):
-        self.dataLog = pm4py.read_xes(self.rawDataPath)
+    def __createLog(self, log):
+        self.dataLog = log
         
     def __addTransitions(self):
         log_activities = pm4py.get_event_attribute_values(self.dataLog, "concept:name")
@@ -227,9 +226,9 @@ class G2_AlphaAlgorithm:
                 if (str(endEvent) == str(transition)):
                     petri_utils.add_arc_from_to(transition, self.end, self.net)
 
-    def __initialiseMarkings(self, numberStartTokens, numberEndTokens):
-        self.initialMarking[self.start] = numberStartTokens
-        self.finalMarking[self.end] = numberEndTokens
+    def __initialiseMarkings(self):
+        self.initialMarking[self.start] = self.numberStartTokens
+        self.finalMarking[self.end] = self.numberEndTokens
     
 
     
