@@ -25,6 +25,7 @@ class G2_AlphaAlgorithm:
 
     def createPetriNet(self, log):
         self.net = PetriNet("Petri Net of G2 Alpha")
+        self.__init__(self.numberStartTokens, self.numberEndTokens)
         self.__createLog(log)
         self.__getStartAndEndEvents()
         self.__addTransitions()
@@ -64,7 +65,7 @@ class G2_AlphaAlgorithm:
     def getSetDict(self):
         return self.setDict   
     
-    ####  PRIVATE FUNCTIONS    ###################################################################
+    ####  PRIVATE FUNCTIONS    ###################################################################        
             
     def __createLog(self, log):
         self.dataLog = log

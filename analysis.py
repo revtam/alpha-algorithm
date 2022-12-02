@@ -73,10 +73,12 @@ class Analysis:
     
     def __create_stability_graph(self, axis: plt.Axes, algo_data: AlgoData, value_attr_name: str, title: str) -> None:
         fitness_values = [result.__getattribute__(value_attr_name) for result in algo_data.results]
+        x_values = [i for i in range(1, len(algo_data.results) + 1)]
         axis.set_title(title)
-        axis.set_xlabel("Number of reruns")
+        axis.set_xlabel("Number of runs")
         axis.set_ylabel("Value")
-        axis.plot(fitness_values, marker="o", linestyle="none")
+        axis.set_xticks(x_values)
+        axis.plot(x_values, fitness_values, marker="o", linestyle="none")
         
     def __log_status(self, message: str) -> None:
         if self.is_status_logging_on:
