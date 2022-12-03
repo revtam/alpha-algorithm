@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-pm4py = "*"
+pm4py = "==2.2.32"
 pandas = "*"
 matplotlib = "*"
 notebook = "*"
