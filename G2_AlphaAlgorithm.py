@@ -1,8 +1,11 @@
-import pm4py
-from pm4py.objects.petri_net.obj import PetriNet, Marking
-from pm4py.objects.petri_net.utils import petri_utils
 import graphviz
 import numpy as np
+import pm4py
+from pm4py.objects.log.obj import EventLog
+from pm4py.objects.petri_net.obj import PetriNet, Marking
+from pm4py.objects.petri_net.utils import petri_utils
+from sortedcontainers import SortedSet
+
 
 class G2_AlphaAlgorithm:
 
@@ -21,9 +24,9 @@ class G2_AlphaAlgorithm:
         self.activityIsKey = dict()
         self.indexIsKey = dict()
         self.footprintMatrix = np.empty(1)
-        self.setDict = dict()
+        self.setDict: dict[tuple[int], str] = dict()
 
-    def createPetriNet(self, log):
+    def createPetriNet(self, log: EventLog):
         self.net = PetriNet("Petri Net of G2 Alpha")
         self.__init__(self.numberStartTokens, self.numberEndTokens)
         self.__createLog(log)
@@ -67,7 +70,7 @@ class G2_AlphaAlgorithm:
     
     ####  PRIVATE FUNCTIONS    ###################################################################        
             
-    def __createLog(self, log):
+    def __createLog(self, log: EventLog):
         self.dataLog = log
         
     def __addTransitions(self):
@@ -103,21 +106,24 @@ class G2_AlphaAlgorithm:
      
     def __createFootPrintMatrix(self):
         variants = pm4py.get_variants_as_tuples(self.dataLog)
-        self.footprintMatrix = np.zeros((len(self.activityIsKey),len(self.activityIsKey)))
-        for variant in variants:
+        self.footprintMatrix = np.zeros((len(self.activityIsKey), len(self.activityIsKey)))
+        for variant in variants.keys():
             for eventnr in range(len(variant)):
+                activityNr = self.activityIsKey[variant[eventnr]]
                 if eventnr != (len(variant)-1):
-                    if (self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr+1]]] != 2):
-                        if (self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr+1]]] == -1):
-                            self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr+1]]] = 2 
+                    followingActivityNr = self.activityIsKey[variant[eventnr+1]]
+                    if self.footprintMatrix[activityNr][followingActivityNr] != 2:
+                        if (self.footprintMatrix[activityNr][followingActivityNr] == -1):
+                            self.footprintMatrix[activityNr][followingActivityNr] = 2 
                         else:
-                            self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr+1]]] = 1 
+                            self.footprintMatrix[activityNr][followingActivityNr] = 1 
                 if eventnr != 0:
-                    if (self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr-1]]] != 2):
-                        if (self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr-1]]] == 1):
-                            self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr-1]]] = 2 
+                    previousActivityNr = self.activityIsKey[variant[eventnr-1]]
+                    if self.footprintMatrix[activityNr][previousActivityNr] != 2:
+                        if (self.footprintMatrix[activityNr][previousActivityNr] == 1):
+                            self.footprintMatrix[activityNr][previousActivityNr] = 2 
                         else:
-                            self.footprintMatrix[self.activityIsKey[variant[eventnr]]][self.activityIsKey[variant[eventnr-1]]] = -1
+                            self.footprintMatrix[activityNr][previousActivityNr] = -1
             
     def __getPlacesAndArcs(self):
         self.__fillSetDict()
@@ -125,56 +131,85 @@ class G2_AlphaAlgorithm:
         self.__createPlacesAndArcs()
         self.__getStartAndEndPlacesAndArcs()
         
-    def __independenceCheck(self, taskANumber, taskBNumber):
-        if (self.footprintMatrix[taskANumber][taskBNumber] != 2):
+    def __isParallel(self, taskANumber, taskBNumber):
+        matrixValue = self.footprintMatrix[taskANumber][taskBNumber]
+        if (matrixValue != 2):
             return True
-        else:
-            return False
+        return False
         
     def __fillSetDict(self):
-        row = 0
-        self.setDict = dict()
-        for row in range(len(self.footprintMatrix)):
-            column = 0
-            for column in range(len(self.footprintMatrix)): 
-                if (self.footprintMatrix[row][column]) == 1:
-                    self.setDict[str(row) + str(column)] = "start"
-                    column2 = (column + 1)
-                    while column2 < len(self.footprintMatrix):
-                        if (self.footprintMatrix[row][column2]) == 1:
-                            if self.__independenceCheck(column, column2) == True:
-                                self.setDict[str(row) + str(column) + str(column2)] = "start"
-                        column2 += 1
-        for column in range(len(self.footprintMatrix)):
-            row = 0
-            for row in range(len(self.footprintMatrix)): 
-                if (self.footprintMatrix[row][column]) == 1:
-                    row2 = (row + 1)
-                    while row2 < len(self.footprintMatrix):
-                        if (self.footprintMatrix[row2][column]) == 1:
-                            if self.__independenceCheck(row, row2):
-                                self.setDict[str(row) + str(row2) + str(column)] = "end"
-                        row2 += 1    
+        startRelations = self.__createRelationDict(1, "start")
+        endRelations = self.__createRelationDict(-1, "end")
+        self.setDict.update(startRelations)
+        self.setDict.update(endRelations)           
+ 
+    def __createRelationDict(self, matrixValue: int, relationRole: str):
+        relationDict = dict()        
+        for rowNr in range(len(self.footprintMatrix)):
+            baseRelationSet: set[tuple] = set()
+            for columnNr in range(len(self.footprintMatrix)): 
+                if self.footprintMatrix[rowNr][columnNr] == matrixValue:
+                    baseRelationSet.add((columnNr,))
+            # in each row, get all possible relations of activity numbers in the column that are eligible for combination
+            rowRelationSet = self.__buildOrderedRelationSet(baseRelationSet)
+            for orderedRelation in rowRelationSet:
+                # depending on the role of the relation, append the row (activity) number to the beginning or to the end of the relation
+                if relationRole == "start":
+                    fromActivities = (rowNr,)
+                    toActivities = orderedRelation
+                else:
+                    fromActivities = orderedRelation
+                    toActivities = (rowNr,)
+                relationKey = fromActivities + toActivities
+                relationDict[relationKey] = relationRole
+        return relationDict
+    
+    def __buildOrderedRelationSet(self, baseRelationSet: set[tuple[int]]) -> set[tuple[int]]:
+            baseRelationList = list(baseRelationSet)
+            createdRelationSet: set[tuple[int]] = set()        
+            # try to merge every relation of the base relationset with every other relation in the set
+            for i, baseRelation in enumerate(baseRelationList):
+                for mergeRelation in baseRelationList[(i + 1):]:
+                    containsDependentPair = False
+                    # check every two relations if they can be merged;
+                    # if there is an activity of one relation that is in a parallel relation to an activity
+                    # of the other relation, the two relations cannot be merged
+                    for baseActivityNr in baseRelation:
+                        if containsDependentPair:
+                            break
+                        for compareActivityNr in mergeRelation:
+                            if not self.__isParallel(baseActivityNr, compareActivityNr):
+                                containsDependentPair = True
+                                break
+                    if not containsDependentPair:
+                        mergedSet = SortedSet(baseRelation + mergeRelation)
+                        createdRelationSet.add(tuple(mergedSet))
+            if len(createdRelationSet):
+                # if new relations were created by merging, try to merge those as well in a recursive manner
+                extendedRelationSet = self.__buildOrderedRelationSet(createdRelationSet)
+                extendedRelationSet.update(baseRelationSet)
+                return extendedRelationSet
+            return set(baseRelationList)
     
     def __findSuperSets(self):
-        keys = []
+        subsetKeys = []
         for relation in self.setDict.keys():
             if len(relation) > 2:
                 for relation2 in self.setDict.keys():
                     if (relation == relation2):
                         continue
                     if set(relation).issuperset(set(relation2)):
-                        keys.append(relation2)
-        for relation in set(keys):
+                        subsetKeys.append(relation2)            
+        for relation in set(subsetKeys):
             self.setDict.pop(relation)
-    
+            
     def __createPlacesAndArcs(self):
-        for place in self.getSetDict():
-            if ((self.getSetDict()[place]) == "start"):
+        for place, value in self.getSetDict().items():
+            if (value == "start"):
                 newPlace = self.__makeStartPlace(place)
                 self.net.places.add(newPlace)
                 self.__addArcsStart(place, newPlace)
-            elif ((self.getSetDict()[place]) == "end"):
+            elif (value == "end"):
                 newPlace = self.__makeEndPlace(place)
                 self.net.places.add(newPlace)
                 self.__addArcsEnd(place, newPlace)
